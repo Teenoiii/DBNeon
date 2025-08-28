@@ -1,5 +1,6 @@
 // server/src/index.js
 require("dotenv").config();
+const path = require("path");
 const express = require("express");
 const cors = require("cors");
 const { PrismaClient } = require("@prisma/client");
@@ -7,20 +8,32 @@ const { PrismaClient } = require("@prisma/client");
 const app = express();
 const prisma = new PrismaClient();
 
-// อนุญาต CORS ตาม env
+// ====== Core middleware ======
+const allowOrigins = (process.env.CORS_ORIGIN || "")
+  .split(",")
+  .map((s) => s.trim())
+  .filter(Boolean);
+
 app.use(
   cors({
-    origin:
-      (process.env.CORS_ORIGIN || "")
-        .split(",")
-        .map((s) => s.trim())
-        .filter(Boolean) || true,
+    origin: allowOrigins.length ? allowOrigins : true,
     credentials: true,
   })
 );
-app.use(express.json());
+app.use(express.json({ limit: "2mb" }));
+app.set("trust proxy", 1); // เผื่ออยู่หลัง proxy อย่าง Render
 
-// 👇 เพิ่มสอง route นี้
+// inject prisma ให้ทุก route ใช้ผ่าน req.prisma
+app.use((req, _res, next) => {
+  req.prisma = prisma;
+  next();
+});
+
+// เสิร์ฟไฟล์อัปโหลด (หมายเหตุ: บน Render เป็นไฟล์ชั่วคราว)
+const uploadsDir = path.join(__dirname, "..", "..", "uploads");
+app.use("/uploads", express.static(uploadsDir));
+
+// ====== Health & Root ======
 app.get("/", (_req, res) => {
   res.send("API is running");
 });
@@ -34,8 +47,30 @@ app.get("/health", async (_req, res) => {
   }
 });
 
-// ... routes อื่น ๆ ของโปรเจกต์คุณ (เช่น /api/*)
+// ====== Routers ======
+const authRouter = require("./auth");
+const itemsRouter = require("./items");
+const spinRouter = require("./spin");
+const adminRouter = require("./admin");
 
-// Render จะกำหนด PORT เอง
+app.use("/api/auth", authRouter);
+app.use("/api/items", itemsRouter);
+app.use("/api/spin", spinRouter);
+app.use("/api/admin", adminRouter);
+
+// ====== 404 & Error handler ======
+app.use((req, res, next) => {
+  if (req.path.startsWith("/api/")) {
+    return res.status(404).json({ error: "Not found" });
+  }
+  return next();
+});
+
+app.use((err, _req, res, _next) => {
+  console.error("Unhandled error:", err);
+  res.status(500).json({ error: "Internal server error" });
+});
+
+// ====== Start ======
 const PORT = process.env.PORT || 4000;
 app.listen(PORT, () => console.log("API running on", PORT));
