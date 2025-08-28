@@ -1,47 +1,41 @@
+// server/src/index.js
 require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
 const { PrismaClient } = require("@prisma/client");
 
-const prisma = new PrismaClient();
 const app = express();
+const prisma = new PrismaClient();
 
-const path = require('path');
-app.use('/uploads', express.static(path.join(__dirname, '..', 'uploads')));
-
-
+// อนุญาต CORS ตาม env
 app.use(
   cors({
-    origin: (origin, cb) => {
-      const allowed = (process.env.CORS_ORIGIN || "")
+    origin:
+      (process.env.CORS_ORIGIN || "")
         .split(",")
         .map((s) => s.trim())
-        .filter(Boolean);
-      // allow tools like curl/postman (no origin)
-      if (!origin) return cb(null, true);
-      if (allowed.length === 0 || allowed.includes(origin))
-        return cb(null, true);
-      return cb(new Error("Not allowed by CORS: " + origin));
-    },
+        .filter(Boolean) || true,
     credentials: true,
   })
 );
+app.use(express.json());
 
-app.use(express.json({ limit: "2mb" }));
-
-// Attach prisma to req for convenience
-app.use((req, _res, next) => {
-  req.prisma = prisma;
-  next();
+// 👇 เพิ่มสอง route นี้
+app.get("/", (_req, res) => {
+  res.send("API is running");
 });
 
-// Routes
-app.use("/api/auth", require("./routes/auth"));
-app.use("/api/spin", require("./routes/spin"));
-app.use("/api/items", require("./routes/items"));
-app.use("/api/admin", require("./routes/admin"));
+app.get("/health", async (_req, res) => {
+  try {
+    await prisma.$queryRaw`SELECT 1`;
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: String(e) });
+  }
+});
 
-app.get("/api/health", (_req, res) => res.json({ ok: true }));
+// ... routes อื่น ๆ ของโปรเจกต์คุณ (เช่น /api/*)
 
+// Render จะกำหนด PORT เอง
 const PORT = process.env.PORT || 4000;
-app.listen(PORT, () => console.log(`API running on http://localhost:${PORT}`));
+app.listen(PORT, () => console.log("API running on", PORT));
