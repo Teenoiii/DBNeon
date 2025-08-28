@@ -1,0 +1,86 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+/**
+ * ====== MODELS ======
+ */
+
+model User {
+  id           Int          @id @default(autoincrement())
+  username     String       @unique
+  passwordHash String       // ใช้เก็บ hash ของ bcrypt
+  role         String       @default("user") // "user" | "admin"
+  points       Int          @default(0)
+  createdAt    DateTime     @default(now())
+
+  spins        SpinHistory[]
+  inventory    UserItem[]
+  grantsGiven    PointsGrant[] @relation("AdminGrants")
+  grantsReceived PointsGrant[]
+}
+
+model Item {
+  id        Int           @id @default(autoincrement())
+  name      String
+  imageUrl  String
+  rarity    String        @default("common") // ใช้บอกสี/ความหายาก
+  weight    Int           @default(10)       // ค่าน้ำหนัก (สุ่ม)
+  stock     Int?
+  isEnabled Boolean       @default(true)
+  createdAt DateTime      @default(now())
+
+  spins     SpinHistory[]
+  owners    UserItem[]
+}
+
+model UserItem {
+  id     Int  @id @default(autoincrement())
+  user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId Int
+  item   Item @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  itemId Int
+  amount Int  @default(0)
+
+  @@unique([userId, itemId])
+}
+
+model SpinHistory {
+  id        Int      @id @default(autoincrement())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    Int
+  item      Item     @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  itemId    Int
+  spent     Int
+  createdAt DateTime @default(now())
+}
+
+model Config {
+  id        Int      @id @default(autoincrement())
+  spinCost  Int      @default(50)
+  title     String?
+  subtitle  String?
+  createdAt DateTime @default(now())
+}
+
+model Setting {
+  key   String @id
+  value String
+}
+
+model PointsGrant {
+  id        Int      @id @default(autoincrement())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    Int
+  admin     User     @relation("AdminGrants", fields: [adminId], references: [id], onDelete: Cascade)
+  adminId   Int
+  amount    Int
+  createdAt DateTime @default(now())
+}
+
+
